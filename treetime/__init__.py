@@ -20,6 +20,7 @@ class NotReadyError(TreeTimeError):
 
 from .treeanc import TreeAnc
 from .treetime import TreeTime, plot_vs_years
+from .asrv import ASRV
 from .clock_tree import ClockTree
 from .treetime import ttconf as treetime_conf
 from .gtr import GTR

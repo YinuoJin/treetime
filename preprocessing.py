@@ -30,7 +30,7 @@ subprocess.call('rm -rf *.fasta.reduced', shell=True)
 
 # build phylogenetic tree
 outfile_suffix = seq[:-6]
-cmd = '%s -m PROTGAMMAJTT -s %s -p 12435 -w %s -n %s' % (raxml, aln_new, abs_path, seq[:-6])
+cmd = '%s -m PROTGAMMAWAGF -s %s -p 12435 -w %s -n %s' % (raxml, aln_new, abs_path, seq[:-6])
 subprocess.call(cmd, shell=True)
 
 # rename tree topology (nwk) & info file

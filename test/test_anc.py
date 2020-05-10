@@ -1,9 +1,18 @@
 import numpy as np
-from Bio import Phylo
-import matplotlib.pyplot as plt
-from treetime import TreeAnc
-import treetime
+from Bio import Phylo, AlignIO
+from io import StringIO
+from collections import defaultdict
+from treetime import seq_utils
+from treetime import TreeAnc, GTR
+from treetime import ASRV
+import random
+import sys
 
+try:
+    from itertools import izip
+except ImportError:  # python3.x
+    izip = zip
+    
 def calc_mutation_rate(t):
     # estimate mutation rate
     node_order = []
@@ -43,19 +52,30 @@ if __name__ == '__main__':
 
       
     # test ASRV
-    #myTree2 = TreeAnc(gtr='jtt92', tree=path+'phyml_tree.nwk', aln=path+'test_phyml.fasta',
-    #                  alpha=0.299, verbose=0)
+    ex_properties = 'EEEEEEEBEEEBEBEBEBEEEBEEEEBEBEEEEEEEEEEBEEEBEEEBEEEEEBEBBBEBBBEBBEEEEEEBEEEEEEBEEEBEEEEEEEEEEEEEEEEEEEBEBEBEEEBEBEEEEBEEEBEBEBEEEEEEEEEBEEEEEEEEEEEEEEEEEEEEBEBEBEEEBEBEEEEEEEBEBEEEEEBEEEEEEEEEBBBEEEBEEEEEEEEEEEEEEEEEBEBEEEEEE'
+    solvent_property = list(ex_properties)
+    myTree2 = TreeAnc(compress=True, gtr='wag', tree=path+'fp_tree.nwk', aln=path+'fp_extant_aa.fasta', verbose=0)
+    myTree2.infer_ancestral_sequences(infer_gtr=False, marginal=True)
     
+    test = myTree2.ancestral_likelihood()
+    print(test.sum())
     
-    #myTree2.infer_ancestral_sequences(infer_gtr=False, marginal=True)
-    #print(myTree2.rates)
-    #print(myTree2.tree.sequence_LH.mean())
+    print(myTree2.tree.sequence_LH.sum())
     
     # test ASRV + Mixture model
-    pseudo_solvent_accessibility = [np.random.choice(['B', 'E']) for i in range(469)]
-    myTree3= TreeAnc(gtr="EX", tree=path+'raxml_tree.nwk', aln=path+'h3n2_aa_aln.fasta',
-                    alpha=0.299, struct_propty=pseudo_solvent_accessibility, verbose=0)
+    #pseudo_solvent_accessibility = [np.random.choice(['B', 'E']) for i in range(469)]
+    #myTree3= TreeAnc(gtr="EX", tree=path+'raxml_tree.nwk', aln=path+'h3n2_aa_aln.fasta',
+    #                alpha=0.299, struct_propty=pseudo_solvent_accessibility, verbose=0)
     
-    myTree3.infer_ancestral_sequences(infer_gtr=False, marginal=True)
-    print(myTree3.tree.sequence_LH.mean())
-    print(myTree3.data.multiplicity)
+    #myTree3.infer_ancestral_sequences(infer_gtr=False, marginal=True)
+    #print(myTree3.tree.sequence_LH.mean())
+    
+    # test joint reconstruction
+    #tree_joint = TreeAnc(gtr='jtt92', tree=path+'raxml_tree.nwk', aln=path+'h3n2_aa_aln.fasta', verbose=0)
+    #tree_joint.infer_ancestral_sequences(infer_gtr=False, marginal=False)
+    
+    #tree_joint_asrv = TreeAnc(gtr='jtt92', tree=path+'raxml_tree.nwk', aln=path+'h3n2_aa_aln.fasta', alpha=0.299, verbose=0)
+    #tree_joint_asrv.infer_ancestral_sequences(infer_gtr=False, marginal=False)
+    
+    #print(tree_joint.tree.sequence_LH.mean(), tree_joint_asrv.tree.sequence_LH.mean())
+    
