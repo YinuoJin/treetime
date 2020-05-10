@@ -750,11 +750,10 @@ class TreeAnc(object):
          sub_lhs : np.ndarray
             The tree likelihood given the sequences
         """
-
-        if self.gtr.is_site_specific:
-            L = self.data.full_length
-        else:
+        if self.data.compress:
             L = self.data.compressed_length
+        else:
+            L = self.data.full_length
 
         sub_lhs = np.ndarray((len(self.rates), L))
         for i, (rate_multiplier, prob_of_rate) in enumerate(self.rates):
@@ -792,7 +791,7 @@ class TreeAnc(object):
 
         sub_lhs = np.logaddexp.reduce(sub_lhs)
 
-        if not self.gtr.is_site_specific:
+        if self.data.compress:
             sub_lhs *= self.data.multiplicity
 
         sequence_joint_LH = sub_lhs.sum()
