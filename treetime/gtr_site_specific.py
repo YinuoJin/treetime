@@ -355,6 +355,11 @@ class GTR_site_specific(GTR):
         self.expQt_interpolator = interp1d(t_grid, stacked_expQT, axis=0,
                                            assume_sorted=True, copy=False, kind='linear')
 
+        self.expQt_interpolators_ss = []
+        for site_idx in range(self.seq_len):
+            stacked_expQT_ss = stacked_expQT[:,:,:,site_idx]
+            self.expQt_interpolators_ss.append(interp1d(t_grid, stacked_expQT_ss, axis=0,
+                                           assume_sorted=True, copy=False, kind='linear'))
 
     def _expQt(self, t, site_idx=None):
         """Raw numerical matrix exponentiation using the diagonalized matrix.
@@ -387,7 +392,7 @@ class GTR_site_specific(GTR):
     def expQt(self, t, site_idx=None):
         if t*self.rate_scale<10 and self.approximate:
             if site_idx != None:
-                return self.expQt_interpolator(t)[:,:,site_idx]
+                return self.expQt_interpolators_ss[site_idx](t)
             else:
                 return self.expQt_interpolator(t)
         else:
