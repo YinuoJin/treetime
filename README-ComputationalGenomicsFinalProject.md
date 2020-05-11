@@ -74,5 +74,5 @@ test_treetime.py \
 how to test-run the project on sample inputs to get the sample output
  
 ### Related Tools
-__________ for generating tree toplogies, __________ for generating MSAs, __________ for infering alpha, ________ for infering protein structual information
+PASTA for generating MSAs, RAxML for generating tree toplogies and infering alpha, DSSP/Sable for infering protein structual information
  
