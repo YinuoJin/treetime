@@ -14,6 +14,10 @@ test_seq_joint_reconstruction_asvr_correct()
 
 test_seq_joint_reconstruction_ss_asvr_correct()
 
+test_seq_joint_reconstruction_mm_correct()
+
+test_seq_joint_reconstruction_mm_asvr_correct()
+
 test_seq_joint_lh_is_max()
 
 test_seq_joint_lh_is_max_asvr()

@@ -190,10 +190,7 @@ class TreeAnc(object):
                                     convert_upper=convert_upper, fill_overhangs=fill_overhangs, ambiguous=self.gtr.ambiguous,
                                     sequence_length=seq_len)
 
-        if self.use_mixture_model:
-            assert self.struct_propty.shape[0] == self.data.full_length, 'No structural property provided with the sequences for site-specific ASR'
-
-        if not self.asrv and self.gtr.is_site_specific and self.data.compress:
+        if (self.use_mixture_model or self.is_site_specific) and self.data.compress:
             raise TypeError("TreeAnc: sequence compression and site specific gtr models are incompatible!")
 
         if self.data.aln and self.tree:
@@ -291,14 +288,21 @@ class TreeAnc(object):
                 models = ['BURIED', 'EXPOSED'] if in_gtr == 'EX' else ['HELIX', 'EXTENDED', 'OTHER']
                 for model in models:
                     self._gtr.append(GTR.standard(model=model, **kwargs))
+                self.is_site_specific = True
             elif in_gtr == 'BE' or in_gtr == 'SECONDARY':
                 self._gtr = GTR_site_specific.standard_ss(model=in_gtr, structural_properties=self.struct_propty, **kwargs)
+                self.is_site_specific = True
             else:
                 self._gtr = GTR.standard(model=in_gtr, **kwargs)
                 self._gtr.logger = self.logger
+                self.is_site_specific = False
         elif isinstance(in_gtr, GTR) or isinstance(in_gtr, GTR_site_specific):
             self._gtr = in_gtr
             self._gtr.logger=self.logger
+            if in_gtr.is_site_specific:
+                self.is_site_specific = True
+            else:
+                self.is_site_specific = False
         else:
             self.logger("TreeAnc.gtr_setter: can't interpret GTR model", 1, warn=True)
             raise TypeError("Cannot set GTR model in TreeAnc class: GTR or "
@@ -558,10 +562,8 @@ class TreeAnc(object):
 
         if method.lower() in ['ml', 'probabilistic']:
             if marginal:
-                if self.asrv and np.isscalar(self.rates) or self.use_mixture_model and not isinstance(self.gtr, list):
-                    raise NotImplementedError("ASVR isn't implemented for marginal reconstruction yet.")
-                else:
-                    _ml_anc = self._ml_anc_marginal
+                assert not self.use_mixture_model or isinstance(self.gtr, list)
+                _ml_anc = self._ml_anc_marginal
             else:
                 if self.rates != [(1, 0)]:
                     _ml_anc = self._ml_anc_joint_asvr
@@ -752,23 +754,50 @@ class TreeAnc(object):
             for node in self.tree.find_clades(order='postorder'):
                 if node.up is None:  # root node
                     # 0-1 profile
-                    profile = seq2prof(node.cseq, self.gtr.profile_map)
+                    prof_map = self.gtr.profile_map if not self.use_mixture_model else self.gtr[0].profile_map
+                    profile = seq2prof(node.cseq, prof_map)
                     # get the probabilities to observe each nucleotide
-                    profile *= self.gtr.Pi.T
+                    pi = self.gtr.Pi if not self.use_mixture_model else self.gtr[0].Pi
+                    profile *= pi.T
                     profile = profile.sum(axis=1)
                     rlog_lh += np.log(profile)  # product over all characters
                     continue
 
                 t = node.branch_length * rate_multiplier
 
-                indices = np.array([(self.gtr.state_index[a], self.gtr.state_index[b])
+                state_index = self.gtr.state_index if not self.use_mixture_model else self.gtr[0].state_index
+                indices = np.array([(state_index[a], state_index[b])
                                     for a, b in zip(node.up.cseq, node.cseq)])
 
-                logQt = np.log(self.gtr.expQt(t))
+                if not self.use_mixture_model:
+                    logQt = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr.expQt(t)))
+                else:
+                    n_states = self.gtr[0].alphabet.shape[0]
+                    logQt = np.ndarray((n_states, n_states, L))
+                    if len(self.gtr) == 2:  # "EX"
+                        B_log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[0].expQt(t)))
+                        E_log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[1].expQt(t)))
+                    if len(self.gtr) == 3:  # "EHO"
+                        H_log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[0].expQt(t)))
+                        E_log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[1].expQt(t)))
+                        O_log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[2].expQt(t)))
+                    for site_idx in range(L):
+                        if len(self.gtr) == 2:  # "EX"
+                            if self.struct_propty[site_idx] == "B":
+                                logQt[:, :, site_idx] = B_log_transitions
+                            if self.struct_propty[site_idx] == "E":
+                                logQt[:, :, site_idx] = E_log_transitions
+                        if len(self.gtr) == 3:  # "EHO"
+                            if self.struct_propty[site_idx] == "H":  # "EHO"
+                                logQt[:, :, site_idx] = H_log_transitions
+                            if self.struct_propty[site_idx] == "E":
+                                logQt[:, :, site_idx] = E_log_transitions
+                            if self.struct_propty[site_idx] == "O":
+                                logQt[:, :, site_idx] = O_log_transitions
 
                 lh = np.zeros(L)
                 for j in range(L):
-                    if self.gtr.is_site_specific:
+                    if self.is_site_specific:
                         lh[j] = logQt[indices[j, 1], indices[j, 0], j]
                     else:
                         lh[j] = logQt[indices[j, 1], indices[j, 0]]
@@ -1339,14 +1368,16 @@ class TreeAnc(object):
 
         """
         N_diff = 0 # number of sites differ from perv reconstruction
-        if self.gtr.is_site_specific:
+        if self.is_site_specific:
             extant_sequences = self.aln
             L = self.data.full_length
         else:
             extant_sequences = self.data.compressed_alignment
             L = self.data.compressed_length
 
-        n_states = self.gtr.alphabet.shape[0]
+        n_states = self.gtr.alphabet.shape[0] if not self.use_mixture_model else self.gtr[0].alphabet.shape[0]
+        alph = self.gtr.alphabet if not self.use_mixture_model else self.gtr[0].alphabet
+        prof_map = self.gtr.profile_map if not self.use_mixture_model else self.gtr[0].profile_map
 
         self.logger("TreeAnc._ml_anc_joint: type of reconstruction: Joint", 2)
 
@@ -1361,10 +1392,34 @@ class TreeAnc(object):
             branch_len = self._branch_length_to_gtr(node)
             # transition matrix from parent states to the current node states.
             # denoted as Pij(i), where j - parent state, i - node state
-            log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr.expQt(branch_len)))
+            if not self.use_mixture_model:
+                log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr.expQt(branch_len)))
+                print("log_transitions.shape =", log_transitions.shape)
+            else:
+                log_transitions = np.ndarray((n_states, n_states, L))
+                if len(self.gtr) == 2:  # "EX"
+                    B_log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[0].expQt(branch_len)))
+                    E_log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[1].expQt(branch_len)))
+                if len(self.gtr) == 3: # "EHO"
+                    H_log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[0].expQt(branch_len)))
+                    E_log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[1].expQt(branch_len)))
+                    O_log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[2].expQt(branch_len)))
+                for site_idx in range(L):
+                    if len(self.gtr) == 2: # "EX"
+                        if self.struct_propty[site_idx] == "B":
+                            log_transitions[:,:,site_idx] = B_log_transitions
+                        if self.struct_propty[site_idx] == "E" :
+                            log_transitions[:,:,site_idx] = E_log_transitions
+                    if len(self.gtr) == 3: # "EHO"
+                        if self.struct_propty[site_idx] == "H": # "EHO"
+                            log_transitions[:,:,site_idx] = H_log_transitions
+                        if self.struct_propty[site_idx] == "E":
+                            log_transitions[:,:,site_idx] = E_log_transitions
+                        if self.struct_propty[site_idx] == "O":
+                            log_transitions[:,:,site_idx] = O_log_transitions
             if node.is_terminal():
                 if node.name in self.data.compressed_alignment:
-                    tmp_prof = seq2prof(extant_sequences[node.name], self.gtr.profile_map)
+                    tmp_prof = seq2prof(extant_sequences[node.name], prof_map)
                     msg_from_children = np.log(np.maximum(tmp_prof, ttconf.TINY_NUMBER))
                 else:
                     msg_from_children = np.zeros((L, n_states))
@@ -1381,7 +1436,7 @@ class TreeAnc(object):
             # preallocate storage
             node.joint_Lx = np.zeros((L, n_states))             # likelihood array
             node.joint_Cx = np.zeros((L, n_states), dtype=int)  # max LH indices
-            for char_i, char in enumerate(self.gtr.alphabet):
+            for char_i, char in enumerate(alph):
                 # Pij(i) * L_ch(i) for given parent state j
                 msg_to_parent = (log_transitions[:,char_i].T + msg_from_children)
                 # For this parent state, choose the best state of the current node:
@@ -1393,7 +1448,8 @@ class TreeAnc(object):
         # root node profile = likelihood of the total tree
         msg_from_children = np.sum(np.stack([c.joint_Lx for c in self.tree.root], axis = 0), axis=0)
         # Pi(i) * Prod_ch Lch(i)
-        self.tree.root.joint_Lx = msg_from_children + np.log(self.gtr.Pi).T
+        pi = self.gtr.Pi if not self.use_mixture_model else self.gtr[0].Pi
+        self.tree.root.joint_Lx = msg_from_children + np.log(pi).T
         normalized_profile = (self.tree.root.joint_Lx.T - self.tree.root.joint_Lx.max(axis=1)).T
 
         # choose sequence characters from this profile.
@@ -1403,8 +1459,9 @@ class TreeAnc(object):
         elif isinstance(sample_from_profile, bool):
             root_sample_from_profile = sample_from_profile
 
+        gtr = self.gtr if not self.use_mixture_model else self.gtr[0]
         seq, anc_lh_vals, idxs = prof2seq(np.exp(normalized_profile),
-                                    self.gtr, sample_from_prof = root_sample_from_profile)
+                                    gtr, sample_from_prof = root_sample_from_profile)
 
         # compute the likelihood of the most probable root sequence
         self.tree.sequence_LH = np.choose(idxs, self.tree.root.joint_Lx.T)
@@ -1428,7 +1485,7 @@ class TreeAnc(object):
             # parent node i. This is the state of the current node
             node.seq_idx = np.choose(node.up.seq_idx, node.joint_Cx.T)
             # reconstruct seq, etc
-            tmp_sequence = np.choose(node.seq_idx, self.gtr.alphabet)
+            tmp_sequence = np.choose(node.seq_idx, alph)
             if self.sequence_reconstruction:
                 N_diff += (tmp_sequence!=node.cseq).sum()
             else:
@@ -1456,11 +1513,13 @@ class TreeAnc(object):
 
     def calc_rate_prob(self, site_idx, rate_multiplier, debug=False, **kwargs):
 
-        if self.gtr.is_site_specific:
+        if self.is_site_specific:
             extant_sequences = self.aln
         else:
             extant_sequences = self.data.compressed_alignment
-        n_states = self.gtr.alphabet.shape[0]
+        n_states = self.gtr.alphabet.shape[0] if not self.use_mixture_model else self.gtr[0].alphabet.shape[0]
+        alph = self.gtr.alphabet if not self.use_mixture_model else self.gtr[0].alphabet
+        prof_map = self.gtr.profile_map if not self.use_mixture_model else self.gtr[0].profile_map
 
         # for the internal nodes, scan over all states j of this node, maximize the likelihood
         for node in self.tree.find_clades(order='postorder'):
@@ -1472,13 +1531,26 @@ class TreeAnc(object):
             branch_len = self._branch_length_to_gtr(node) * rate_multiplier
             # transition matrix from parent states to the current node states.
             # denoted as Pij(i), where j - parent state, i - node state
-            if self.gtr.is_site_specific:
+            if not self.use_mixture_model and not self.is_site_specific:
+                log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr.expQt(branch_len)))
+            elif not self.use_mixture_model and self.is_site_specific:
                 log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr.expQt(branch_len, site_idx=site_idx)))
             else:
-                log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr.expQt(branch_len)))
+                if len(self.gtr) == 2: # "EX"
+                    if self.struct_propty[site_idx] == "B":
+                        log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[0].expQt(branch_len)))
+                    if self.struct_propty[site_idx] == "E" :
+                        log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[1].expQt(branch_len)))
+                if len(self.gtr) == 3:
+                    if self.struct_propty == "H": # "EHO"
+                        log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[0].expQt(branch_len)))
+                    if self.struct_propty == "E":
+                        log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[1].expQt(branch_len)))
+                    if self.struct_propty == "O":
+                        log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[2].expQt(branch_len)))
             if node.is_terminal():
                 if node.name in self.data.compressed_alignment:
-                    tmp_prof = seq2prof(extant_sequences[node.name], self.gtr.profile_map)[site_idx]
+                    tmp_prof = seq2prof(extant_sequences[node.name], prof_map)[site_idx]
                     msg_from_children = np.log(np.maximum(tmp_prof, ttconf.TINY_NUMBER))
                 else:
                     msg_from_children = np.zeros(n_states)
@@ -1493,7 +1565,7 @@ class TreeAnc(object):
                 # this is prod_ch L_x(i)
                 msg_from_children = np.sum(np.stack([c.joint_Lx for c in node.clades], axis=0), axis=0)
             else:
-                tmp_prof = seq2prof(np.full(1, node.conditionalized_val), self.gtr.profile_map)[0]
+                tmp_prof = seq2prof(np.full(1, node.conditionalized_val), prof_map)[0]
                 msg_from_children = np.log(np.maximum(tmp_prof, ttconf.TINY_NUMBER))
 
                 msg_from_children[np.isnan(msg_from_children) | np.isinf(msg_from_children)] = -ttconf.BIG_NUMBER
@@ -1508,7 +1580,7 @@ class TreeAnc(object):
             # preallocate storage
             node.joint_Lx = np.zeros(n_states)             # likelihood array
             node.joint_Cx = np.zeros(n_states, dtype=int)  # max LH indices
-            for char_i, char in enumerate(self.gtr.alphabet):
+            for char_i, char in enumerate(alph):
                 # Pij(i) * L_ch(i) for given parent state j
                 msg_to_parent = (log_transitions[:,char_i].T + msg_from_children)
                 # For this parent state, choose the best state of the current node:
@@ -1527,7 +1599,7 @@ class TreeAnc(object):
             # this is prod_ch L_x(i)
             msg_from_children = np.sum(np.stack([c.joint_Lx for c in self.tree.root], axis=0), axis=0)
         else:
-            tmp_prof = seq2prof(np.full(1, node.conditionalized_val), self.gtr.profile_map)[0]
+            tmp_prof = seq2prof(np.full(1, node.conditionalized_val), prof_map)[0]
             msg_from_children = np.log(np.maximum(tmp_prof, ttconf.TINY_NUMBER))
 
             msg_from_children[np.isnan(msg_from_children) | np.isinf(msg_from_children)] = -ttconf.BIG_NUMBER
@@ -1537,15 +1609,20 @@ class TreeAnc(object):
             msg_from_children += np.sum(np.stack([c.joint_Lx for c in node.clades], axis=0), axis=0)
 
         # Pi(i) * Prod_ch Lch(i)
-        if self.gtr.is_site_specific:
-            self.tree.root.joint_Lx = msg_from_children + np.log(self.gtr.Pi[:,site_idx]).T
+        pi = self.gtr.Pi if not self.use_mixture_model else self.gtr[0].Pi
+        if not self.use_mixture_model and not self.is_site_specific:
+            self.tree.root.joint_Lx = msg_from_children + np.log(pi).T
+        elif not self.use_mixture_model and self.is_site_specific:
+            self.tree.root.joint_Lx = msg_from_children + np.log(pi[:,site_idx]).T
         else:
-            self.tree.root.joint_Lx = msg_from_children + np.log(self.gtr.Pi).T
+            self.tree.root.joint_Lx = msg_from_children + np.log(pi).T
+
         normalized_profile = (self.tree.root.joint_Lx.T - self.tree.root.joint_Lx.max(axis=0)).T
 
         # choose sequence characters from this profile.
+        gtr = self.gtr if not self.use_mixture_model else self.gtr[0]
         seq, anc_lh_vals, idxs = prof2seq_for_bnb(np.exp(normalized_profile),
-                                             self.gtr, sample_from_prof=False)
+                                             gtr, sample_from_prof=False)
 
         # compute the likelihood of the most probable root sequence
         site_LH = np.choose(idxs, self.tree.root.joint_Lx.T)
@@ -1616,7 +1693,7 @@ class TreeAnc(object):
         self._ml_anc_marginal()
 
 
-        if self.gtr.is_site_specific:
+        if self.is_site_specific:
             L = self.data.full_length
         else:
             L = self.data.compressed_length
