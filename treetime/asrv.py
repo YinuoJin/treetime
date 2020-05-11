@@ -39,17 +39,24 @@ class ASRV(object):
     def calc_rates(self):
         """
         calculate average value in each category as rate in ASRV
+        
+        Returns
+        -------
+        rates : list
+            list of tuples representing rate and log probability of each rate: [(r_1, log(w_1)),...,(r_k, log(w_k))]
         """
         threshold = 1e-6
+        log_weight = np.log(1 / self.num_catg)  # weight (probability) of each rate for ASRV
         
         perc_points = [0]
         perc_points.extend([gamma.ppf(i/self.num_catg, a=self.alpha, scale=self.scale) for i in range(1, self.num_catg)])
         perc_points.append(gamma.ppf(1-threshold, a=self.alpha, scale=self.scale))
         
-        rates = np.zeros(self.num_catg)
+        rates = []
         
         for i in range(len(perc_points)-1):
             a, b = perc_points[i], perc_points[i+1]
-            rates[i] = (gammainc(self.alpha+1, b*self.alpha) - gammainc(self.alpha+1, a*self.alpha)) * self.num_catg
+            r_i = (gammainc(self.alpha+1, b*self.alpha) - gammainc(self.alpha+1, a*self.alpha)) * self.num_catg
+            rates.append((r_i, log_weight))
         
         return rates

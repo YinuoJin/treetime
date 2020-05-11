@@ -51,11 +51,11 @@ class GTR_site_specific(GTR):
          mu : float
             Substitution rate
 
-         W : nxn matrix
-            Substitution matrix
+         W : nxn matrix or a list of site-specific nxn matrices
+            Substitution matrix - shape: (n,n) or (n,n,L)
 
-         pi : n vector
-            Equilibrium frequencies
+         pi : n vector or a list of site-specific n vectors
+            Equilibrium frequencies - shape: (n,) or (n,L)
 
         """
         if not np.isscalar(mu) and pi is not None and len(pi.shape)==2:
@@ -82,24 +82,31 @@ class GTR_site_specific(GTR):
                 Pi = np.ones(shape=(n,self.seq_len))
 
         self._Pi = Pi/np.sum(Pi, axis=0)
-
-        if W is None or W.shape!=(n,n):
-            if (W is not None) and W.shape!=(n,n):
+        
+        if W is None or W.shape!=(n,n) and W.shape!=(n,n,self.seq_len):
+            if (W is not None) and W.shape!=(n,n) and W.shape!=(n,n,self.seq_len):
                 raise ValueError("GTR_site_specific: Size of substitution matrix (got {}) does not match alphabet length {}".format(W.shape, n))
             W = np.ones((n,n))
             np.fill_diagonal(W, 0.0)
             np.fill_diagonal(W, - W.sum(axis=0))
+        elif W.shape==(n,n,self.seq_len):
+            W = np.array(W)
         else:
             W=0.5*(np.copy(W)+np.copy(W).T)
 
-        np.fill_diagonal(W,0)
-        average_rate = np.einsum('ia,ij,ja',self.Pi, W, self.Pi)/self.seq_len
-        # average_rate = W.dot(avg_pi).dot(avg_pi)
-        self._W = W/average_rate
-        self._mu *=average_rate
+        if len(W.shape) == 2:
+            np.fill_diagonal(W,0)
+            average_rate = np.einsum('ia,ij,ja',self.Pi, W, self.Pi)/self.seq_len
+            self._W = W / average_rate
+            self._mu *= average_rate
+        else:
+            average_rate = np.einsum('ia,ij...,ja', self.Pi, W, self.Pi)/self.seq_len
+            self._W = W
+            #self._W = W/average_rate
+            #self._mu *= average_rate
 
-
-        self.is_site_specific=True
+        self.is_site_specific = True
+        
         self._eig()
         self._make_expQt_interpolator()
 
@@ -193,6 +200,21 @@ class GTR_site_specific(GTR):
         gtr = cls(**kwargs)
         gtr.assign_rates(mu=mu, pi=pi, W=W)
         return gtr
+    
+    
+    @staticmethod
+    def standard_ss(model, structural_properties, **kwargs):
+        from .aa_models import BE, SECONDARY
+        
+        if model.lower() == 'be':
+            model = BE(structural_properties=structural_properties, **kwargs)
+        elif model.lower() == 'secondary':
+            model = SECONDARY(structural_properties=structural_properties, **kwargs)
+        else:
+            raise KeyError("The GTR site-specific model '{}' is not in the list of available models."
+                "".format(model))
+        
+        return model
 
 
     @classmethod
@@ -321,7 +343,8 @@ class GTR_site_specific(GTR):
         """Function that evaluates the exponentiated substitution matrix at multiple
         time points and constructs a linear interpolation object
         """
-        self.rate_scale = self.average_rate().mean()
+        #self.rate_scale = self.average_rate().mean()
+        self.rate_scale = 1.0
         t_grid = (1.0/self.rate_scale)*np.concatenate((np.linspace(0,.1,11)[:-1],
                                                      np.linspace(.1,1,21)[:-1],
                                                      np.linspace(1,5,21)[:-1],
@@ -410,7 +433,8 @@ class GTR_site_specific(GTR):
         Qt = self.expQt(t)
         res = np.einsum('ai,ija->aj', profile, Qt)
 
-        return  np.log(np.maximum(ttconf.TINY_NUMBER,res)) if return_log else np.maximum(0,res)
+        #return np.log(np.maximum(ttconf.TINY_NUMBER,res)) if return_log else np.maximum(0,res)
+        return np.log(res) if return_log else res
 
 
     def evolve(self, profile, t, return_log=False):
@@ -500,8 +524,11 @@ class GTR_site_specific(GTR):
 
 
     def average_rate(self):
+        tmp = np.einsum('a,ia,ij...,ja', self.mu, self.Pi, self.W, self.Pi)
         if self.Pi.shape[1]>1:
-            return np.einsum('a,ia,ij,ja->a',self.mu, self.Pi, self.W, self.Pi)
+            if len(self.W.shape) == 2:
+                return np.einsum('a,ia,ij,ja->a',self.mu, self.Pi, self.W, self.Pi)
+            else:
+                return np.einsum('a,ia,ij...,ja->a...', self.mu, self.Pi, self.W, self.Pi)
         else:
             return self.mu*np.einsum('ia,ij,ja->a',self.Pi, self.W, self.Pi)
-

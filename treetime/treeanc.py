@@ -54,7 +54,7 @@ class TreeAnc(object):
     alignment, making ancestral state inference
     """
 
-    def __init__(self, tree=None, aln=None, gtr=None, alpha=-1, rates = [(1,0)],
+    def __init__(self, tree=None, aln=None, gtr=None, rates = [(1,0)],
                  fill_overhangs=True, ref=None, verbose = ttconf.VERBOSE,
                  ignore_gaps=True, convert_upper=True, log=None, compress=True,
                  seq_len=None, struct_propty=None, **kwargs):
@@ -119,19 +119,14 @@ class TreeAnc(object):
             length of the sequence. this is inferred from the input alignment or the reference
             sequence in most cases but can be specified for other applications.
             
-        alpha : float, optional
-            alpha parameter value in fitted discrete-gamma distribution to infer heterogeneous
-            rates in order to apply Among-site rate variation (ASRV) in ancestral reconstruction
-            default alpha = -1 --> no alpha value inferred from the phylogeny
-                    alpha > 0  --> infer rates and apply ASRV
-            
-        rates : list of float
-            The distribution of mutation rates over sites in the form of a list of rates
-            Each rate has equal weight (probability) W_i = 1 / len(rates)
+        rates : list of tuples
+            The distribution of mutation rates over sites in the form of a list of tuples: (r_i, w_i)
+            Each rate has equal weight (probability) w_i = 1 / len(rates)
             
         struct_propty list of character (str)
             Site-specific structural property for ASR with mixture model
-            e.g. struct_propty = ['B', 'E', 'B', 'B',...'E'] --> "buried"/"exposed" site
+            e.g. struct_propty = ['B', 'E', 'B', 'B',...'E'] --> EX model with "buried / exposed" states
+                 struct_propty = ['E', 'H', 'E', 'E',...'O'] --> EHO model with "extended / helix/ other" states
             
         **kwargs
            Keyword arguments to construct the GTR model
@@ -163,7 +158,7 @@ class TreeAnc(object):
         self.ignore_gaps = ignore_gaps
         self.reconstructed_tip_sequences = False
         self.sequence_reconstruction = None
-        self.rates = rates   # list of rates [r_1,...,r_k] for ASRV-based ancestral sequence reconstruction
+        self.rates = rates
         self.struct_propty = np.array(struct_propty, dtype='str')
         self._tree = None
         self.tree = tree
@@ -173,13 +168,8 @@ class TreeAnc(object):
         # set up GTR model
         # infer heterogeneous rates from ASRV if applicable
         self._gtr = None
-        self.asrv = False  # indicator of ASRV usage
+        self.asrv = True if len(rates) > 1 else False # indicator of ASRV usage
         self.use_mixture_model = True if gtr in ['EX', 'EHO'] else False  # indicator of mixture model
-
-        if alpha > 0:
-            asrv = ASRV(alpha)
-            self.rates = asrv.calc_rates()
-            self.asrv = True
             
         self.set_gtr(gtr or 'JC69', **kwargs)
         self.propty_gtr_dict = None
@@ -203,10 +193,8 @@ class TreeAnc(object):
         if self.use_mixture_model:
             assert self.struct_propty.shape[0] == self.data.full_length, 'No structural property provided with the sequences for site-specific ASR'
 
-        self.rates = rates
-  
-        if self.gtr.is_site_specific and self.data.compress:
-            raise TypeError("TreeAnc: sequence compression and site specific gtr models are incompatible!" )
+        if not self.asrv and self.gtr.is_site_specific and self.data.compress:
+            raise TypeError("TreeAnc: sequence compression and site specific gtr models are incompatible!")
 
         if self.data.aln and self.tree:
             self._check_alignment_tree_gtr_consistency()
@@ -303,6 +291,8 @@ class TreeAnc(object):
                 models = ['BURIED', 'EXPOSED'] if in_gtr == 'EX' else ['HELIX', 'EXTENDED', 'OTHER']
                 for model in models:
                     self._gtr.append(GTR.standard(model=model, **kwargs))
+            elif in_gtr == 'BE' or in_gtr == 'SECONDARY':
+                self._gtr = GTR_site_specific.standard_ss(model=in_gtr, structural_properties=self.struct_propty, **kwargs)
             else:
                 self._gtr = GTR.standard(model=in_gtr, **kwargs)
                 self._gtr.logger = self.logger
@@ -529,7 +519,7 @@ class TreeAnc(object):
 
 
     def infer_ancestral_sequences(self, method='probabilistic', infer_gtr=False,
-                                  marginal=False, reconstruct_tip_states=False, **kwargs):
+                                  marginal=False, reconstruct_tip_states=True, **kwargs):
         """Reconstruct ancestral sequences
 
         Parameters
@@ -558,7 +548,7 @@ class TreeAnc(object):
             raise MissingDataError("TreeAnc.infer_ancestral_sequences: ERROR, sequences or tree are missing")
 
         self.logger("TreeAnc.infer_ancestral_sequences with method: %s, %s"%(method, 'marginal' if marginal else 'joint'), 1)
-
+        
         if not reconstruct_tip_states:
             self.logger("WARNING: Previous versions of TreeTime (<0.7.0) RECONSTRUCTED sequences"
                         " of tips at positions with AMBIGUOUS bases. This resulted in"
@@ -760,7 +750,6 @@ class TreeAnc(object):
             rlog_lh = np.zeros(L)
 
             for node in self.tree.find_clades(order='postorder'):
-
                 if node.up is None:  # root node
                     # 0-1 profile
                     profile = seq2prof(node.cseq, self.gtr.profile_map)
@@ -788,7 +777,7 @@ class TreeAnc(object):
 
             rlog_lh += prob_of_rate
             sub_lhs[i] = rlog_lh
-
+            
         sub_lhs = np.logaddexp.reduce(sub_lhs)
 
         if self.data.compress:
@@ -965,13 +954,13 @@ class TreeAnc(object):
     # |  helper functions for ASRV/Mixture ASR  |
     # +-----------------------------------------+
     
-    def matrix_indicators(self, n_rates, n_states):
+    def matrix_indicators(self, n_states):
         """
         helper function to calculate site-specific matrix indicators
 
         Returns
         -------
-        indicator: np.ndarray of shape (n_rates, L, n_states)
+        indicator: np.ndarray of shape (L, n_states)
         """
         indicators = None
         if not isinstance(self.gtr, list):
@@ -1148,7 +1137,7 @@ class TreeAnc(object):
         n_rates = len(self.rates)   # categories of rates
         n_states = self.gtr[0].alphabet.shape[0] if self.use_mixture_model else self.gtr.alphabet.shape[0]  # ∑(character)
         
-        indicators = self.matrix_indicators(n_rates, n_states)
+        indicators = self.matrix_indicators(n_states)
         
         self.logger("Attaching sequence profiles to leafs...", 3)
         
@@ -1199,7 +1188,7 @@ class TreeAnc(object):
         n_states = self.gtr[0].alphabet.shape[0] if self.use_mixture_model else self.gtr.alphabet.shape[0]  # ∑(character)
         weight = 1 / n_rates  # weight of each rate: P(r_1) = ... = P(r_k) = 1 / k
 
-        indicators = self.matrix_indicators(n_rates, n_states)
+        indicators = self.matrix_indicators(n_states)
         
         self.logger("Computing root node seqeucne and total tree likelihod...", 3)
         
@@ -1224,7 +1213,10 @@ class TreeAnc(object):
         marginal_order_idxs = np.flip(np.argsort(norm_total_marginal_LH, axis=1), axis=1)
         self.tree.root.marginal_order = []
         for idxs in marginal_order_idxs:
-            self.tree.root.marginal_order.append([self.gtr.alphabet[idx] for idx in idxs])
+            if self.use_mixture_model:
+                self.tree.root.marginal_order.append([self.gtr[0].alphabet[idx] for idx in idxs])
+            else:
+                self.tree.root.marginal_order.append([self.gtr.alphabet[idx] for idx in idxs])
 
         # Assign most likely characters at root node: argmax_a rownorm(L(a))
         seq = self.assign_seqs(norm_total_marginal_LH, indicators)
@@ -1262,14 +1254,13 @@ class TreeAnc(object):
            C1  C2
           ... ...
         """
-        n_gtrs = len(self.gtr) if self.use_mixture_model else 1
         L = self.data.full_length if self.use_mixture_model else self.data.compressed_length  # sequence length
         n_rates = len(self.rates)  # categories of rates
         n_states = self.gtr[0].alphabet.shape[0] if self.use_mixture_model else self.gtr.alphabet.shape[0]  # ∑(character)
         weight = 1 / n_rates  # weight of each rate: P(r_1) = ... = P(r_k) = 1 / k
         N_diff = 0
         
-        indicators = self.matrix_indicators(n_rates, n_states)
+        indicators = self.matrix_indicators(n_states)
         
         self.logger("Preorder: computing marginal profiles", 3)
         
@@ -1299,7 +1290,7 @@ class TreeAnc(object):
                     
                     # calculate MARGINAL property
                     node.marginal_LH[i, :, :], _ = normalize_profile(node.upward_LH[i] * msg_from_parent, indicators)
-                    
+            
             node.marginal_outgroup_LH = node.downward_LH.mean(axis=0)  # average DOWN likelihood of k rate categories
             N_diff += 0 if self.use_mixture_model else self.data.compressed_length
 
@@ -1313,7 +1304,10 @@ class TreeAnc(object):
             marginal_order_idxs = np.flip(np.argsort(norm_total_marginal_LH, axis=1), axis=1)
             node.marginal_order = []
             for idxs in marginal_order_idxs:
-                node.marginal_order.append([self.gtr.alphabet[idx] for idx in idxs])
+                if self.use_mixture_model:
+                    node.marginal_order.append([self.gtr[0].alphabet[idx] for idx in idxs])
+                else:
+                    node.marginal_order.append([self.gtr.alphabet[idx] for idx in idxs])
 
             seq = self.assign_seqs(norm_total_marginal_LH, indicators)
             node._cseq = seq
@@ -1557,7 +1551,6 @@ class TreeAnc(object):
         site_LH = np.choose(idxs, self.tree.root.joint_Lx.T)
 
         return site_LH
-    
 
     def store_site_reconstruction(self, site_idx, sequence_LH, best_search):
 
@@ -1565,7 +1558,6 @@ class TreeAnc(object):
 
         for (node, val)  in best_search:
             node._cseq[site_idx] = val
-            
 
     def _ml_anc_joint_asvr(self, sample_from_profile=False,
             reconstruct_tip_states=False, debug=False, **kwargs):
@@ -1623,6 +1615,7 @@ class TreeAnc(object):
         self.asrv = True
         self._ml_anc_marginal()
 
+
         if self.gtr.is_site_specific:
             L = self.data.full_length
         else:
@@ -1657,7 +1650,7 @@ class TreeAnc(object):
         # do clean-up
         if not debug:
             for node in self.tree.find_clades(order='preorder'):
-                del node._old_cseq
+                #del node._old_cseq
                 del node.joint_Lx
                 del node.joint_Cx
                 if hasattr(node, 'seq_idx'):

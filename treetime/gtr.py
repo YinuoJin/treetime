@@ -221,7 +221,7 @@ class GTR(object):
         average_rate = avg_transition(W, self.Pi, gap_index=self.gap_index)
         self._W = W/average_rate
         self._mu *=average_rate
-
+        
         self._eig()
 
 
@@ -381,7 +381,7 @@ class GTR(object):
 
         """
         from .nuc_models import JC69, K80, F81, HKY85, T92, TN93
-        from .aa_models  import JTT92, BURIED, EXPOSED, HELIX, EXTENDED, OTHER
+        from .aa_models import JTT92, WAG01, LG08, HELIX, EXTENDED, OTHER, BURIED, EXPOSED
 
         if model.lower() in ['jc', 'jc69', 'jukes-cantor', 'jukes-cantor69', 'jukescantor', 'jukescantor69']:
             model = JC69(**kwargs)
@@ -397,6 +397,10 @@ class GTR(object):
             model = TN93(**kwargs)
         elif model.lower() in ['jtt', 'jtt92']:
             model = JTT92(**kwargs)
+        elif model.lower() in ['wag', 'wag01']:
+            model = WAG01(**kwargs)
+        elif model.lower() in ['lg', 'lg08']:
+            model = LG08(**kwargs)
         elif model.lower() == 'buried':
             model = BURIED(**kwargs)
         elif model.lower() == 'exposed':
@@ -408,8 +412,9 @@ class GTR(object):
         elif model.lower == 'other':
             model = OTHER(**kwargs)
         else:
-            raise KeyError("The GTR model '{}' is not in the list of available models."
-                "".format(model))
+            model = OTHER(**kwargs)
+            #raise KeyError("The GTR model '{}' is not in the list of available models."
+            #    "".format(model))
 
         model.mu = kwargs['mu'] if 'mu' in kwargs else 1.0
         return model
@@ -981,7 +986,7 @@ class GTR(object):
         '''
         eLambdaT = np.diag(self._exp_lt(t)) # vector length = a
         Qs = self.v.dot(eLambdaT.dot(self.v_inv))   # This is P(nuc1 | given nuc_2)
-        return np.maximum(0,Qs)
+        return np.maximum(ttconf.SUPERTINY_NUMBER, Qs)   # avoid nan in log calculations
 
 
     def expQs(self, s):
