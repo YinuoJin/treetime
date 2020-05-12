@@ -1,6 +1,8 @@
 ## Computational Genomics Final Project 
 ### (Extending Ancestral Sequence Reconstruction features to Treetime)
 
+Treetime original Readme file is attached [here](./README_original.md).
+
 ### Overview
 
 For our final project, we added features to a Python library for phylogenetic analysis called TreeTime. Our main improvements to TreeTime are the addition of rate variation and site-specific matrices for both joint and marginal ancestral sequence reconstruction. TreeTime supports a number of functions besides sequence reconstruction. For a fuller picture, here is how the main README.txt summarizes it:
