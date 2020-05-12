@@ -1,4 +1,5 @@
-## Computational Genomics Final Project (Extending Ancestral Sequence Reconstruction features to Treetime)
+## Computational Genomics Final Project 
+### (Extending Ancestral Sequence Reconstruction features to Treetime)
 
 ### Overview
 
