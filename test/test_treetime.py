@@ -5,7 +5,6 @@ if sys.version_info[0] < 3:
     from StringIO import StringIO
 else:
     from io import StringIO
-sys.path.insert(0, "../treetime")
 
 
 # Tests
@@ -44,7 +43,7 @@ def test_ancestral():
     #nwk = str(os.path.join(root_dir, 'treetime_examples/data/h3n2_na/h3n2_na_20.nwk'))
     
     # configure path
-    path = '../data/treetime_data/h3n2_na'
+    path = '../treetime_examples/data/h3n2_na'
     fasta_path = os.path.join(path, 'h3n2_na_20.fasta')
     nwk_path = os.path.join(path, 'h3n2_na_20.nwk')
     
