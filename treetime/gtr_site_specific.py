@@ -101,9 +101,8 @@ class GTR_site_specific(GTR):
             self._mu *= average_rate
         else:
             average_rate = np.einsum('ia,ij...,ja', self.Pi, W, self.Pi)/self.seq_len
-            self._W = W
-            #self._W = W/average_rate
-            #self._mu *= average_rate
+            self._W = W/average_rate
+            self._mu *= average_rate
 
         self.is_site_specific = True
         
@@ -343,8 +342,7 @@ class GTR_site_specific(GTR):
         """Function that evaluates the exponentiated substitution matrix at multiple
         time points and constructs a linear interpolation object
         """
-        #self.rate_scale = self.average_rate().mean()
-        self.rate_scale = 1.0
+        self.rate_scale = self.average_rate().mean()
         t_grid = (1.0/self.rate_scale)*np.concatenate((np.linspace(0,.1,11)[:-1],
                                                      np.linspace(.1,1,21)[:-1],
                                                      np.linspace(1,5,21)[:-1],
@@ -386,7 +384,8 @@ class GTR_site_specific(GTR):
             site_v_inv = self.v_inv[:,:,site_idx].T
             final_Qt = np.einsum('ij,j,jk', site_v, eLambdaT, site_v_inv)
 
-        return final_Qt
+        #return final_Qt
+        return np.maximum(ttconf.SUPERTINY_NUMBER, final_Qt)
 
 
     def expQt(self, t, site_idx=None):

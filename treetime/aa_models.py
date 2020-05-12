@@ -367,8 +367,6 @@ def BE(mu=1.0, structural_properties=None):
          0.348362, 4.136445, 1.199764, 0.368231, 0.266531, 3.184874, 0.252132, 0.459187, 0.0]
     ])
     
-    L = structural_properties.shape[0]
-    
     pis_mix = np.zeros((L, 20))
     pis_mix[structural_properties == 'B'] = pis_buried
     pis_mix[structural_properties == 'E'] = pis_exposed

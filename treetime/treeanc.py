@@ -162,26 +162,28 @@ class TreeAnc(object):
         self.struct_propty = np.array(struct_propty, dtype='str')
         self._tree = None
         self.tree = tree
+        self.use_mixture_model = True if gtr in ['EX', 'EHO'] else False  # indicator of mixture model
         if tree is None:
             raise ValueError("TreeAnc: tree loading failed! exiting")
-        
+            
         # set up GTR model
         # infer heterogeneous rates from ASRV if applicable
         self._gtr = None
         self.asrv = True if len(rates) > 1 else False # indicator of ASRV usage
-        self.use_mixture_model = True if gtr in ['EX', 'EHO'] else False  # indicator of mixture model
-            
         self.set_gtr(gtr or 'JC69', **kwargs)
         self.propty_gtr_dict = None
         if gtr == 'EX':
             self.propty_gtr_dict = {'B': self.gtr[0], 'E': self.gtr[1]}
         elif gtr == 'EHO':
             self.propty_gtr_dict = {'H': self.gtr[0], 'E': self.gtr[1], 'O': self.gtr[2]}
-
+            
+        # check the status of compress, convert to FALSE if using mixture/site-specific models
+        if self.use_mixture_model or self.is_site_specific:
+            compress = False
+            
         # set alignment and attach sequences to tree on success.
         # otherwise self.data.aln will be None
         if self.use_mixture_model:
-            compress = False
             self.data = SequenceData(aln, ref=ref, logger=self.logger, compress=compress,
                                     convert_upper=convert_upper, fill_overhangs=fill_overhangs, ambiguous=self.gtr[0].ambiguous,
                                     sequence_length=seq_len)
@@ -189,7 +191,7 @@ class TreeAnc(object):
             self.data = SequenceData(aln, ref=ref, logger=self.logger, compress=compress,
                                     convert_upper=convert_upper, fill_overhangs=fill_overhangs, ambiguous=self.gtr.ambiguous,
                                     sequence_length=seq_len)
-
+            
         if (self.use_mixture_model or self.is_site_specific) and self.data.compress:
             raise TypeError("TreeAnc: sequence compression and site specific gtr models are incompatible!")
 
@@ -752,9 +754,9 @@ class TreeAnc(object):
             rlog_lh = np.zeros(L)
 
             for node in self.tree.find_clades(order='postorder'):
+                prof_map = self.gtr.profile_map if not self.use_mixture_model else self.gtr[0].profile_map
                 if node.up is None:  # root node
                     # 0-1 profile
-                    prof_map = self.gtr.profile_map if not self.use_mixture_model else self.gtr[0].profile_map
                     profile = seq2prof(node.cseq, prof_map)
                     # get the probabilities to observe each nucleotide
                     pi = self.gtr.Pi if not self.use_mixture_model else self.gtr[0].Pi
@@ -770,17 +772,17 @@ class TreeAnc(object):
                                     for a, b in zip(node.up.cseq, node.cseq)])
 
                 if not self.use_mixture_model:
-                    logQt = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr.expQt(t)))
+                    logQt = np.log(np.maximum(ttconf.SUPERTINY_NUMBER, self.gtr.expQt(t)))
                 else:
                     n_states = self.gtr[0].alphabet.shape[0]
                     logQt = np.ndarray((n_states, n_states, L))
                     if len(self.gtr) == 2:  # "EX"
-                        B_log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[0].expQt(t)))
-                        E_log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[1].expQt(t)))
+                        B_log_transitions = np.log(np.maximum(ttconf.SUPERTINY_NUMBER, self.gtr[0].expQt(t)))
+                        E_log_transitions = np.log(np.maximum(ttconf.SUPERTINY_NUMBER, self.gtr[1].expQt(t)))
                     if len(self.gtr) == 3:  # "EHO"
-                        H_log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[0].expQt(t)))
-                        E_log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[1].expQt(t)))
-                        O_log_transitions = np.log(np.maximum(ttconf.TINY_NUMBER, self.gtr[2].expQt(t)))
+                        H_log_transitions = np.log(np.maximum(ttconf.SUPERTINY_NUMBER, self.gtr[0].expQt(t)))
+                        E_log_transitions = np.log(np.maximum(ttconf.SUPERTINY_NUMBER, self.gtr[1].expQt(t)))
+                        O_log_transitions = np.log(np.maximum(ttconf.SUPERTINY_NUMBER, self.gtr[2].expQt(t)))
                     for site_idx in range(L):
                         if len(self.gtr) == 2:  # "EX"
                             if self.struct_propty[site_idx] == "B":
@@ -808,14 +810,11 @@ class TreeAnc(object):
             sub_lhs[i] = rlog_lh
             
         sub_lhs = np.logaddexp.reduce(sub_lhs)
-
+        
         if self.data.compress:
             sub_lhs *= self.data.multiplicity
 
-        sequence_joint_LH = sub_lhs.sum()
-
-        return sequence_joint_LH
-
+        return sub_lhs
 
     def _branch_length_to_gtr(self, node):
         """
@@ -940,7 +939,6 @@ class TreeAnc(object):
             node.marginal_subtree_LH, offset = normalize_profile(tmp_log_subtree_LH, log=True)
             node.marginal_subtree_LH_prefactor += offset  # store log-prefactor
 
-
     def preorder_traversal_marginal(self, reconstruct_tip_states=False, sample_from_profile=False, assign_sequence=False):
         self.logger("Preorder: computing marginal profiles...",3)
         # propagate root -->> leaves, reconstruct the internal node sequences
@@ -970,7 +968,7 @@ class TreeAnc(object):
                     N_diff += (seq!=node.cseq).sum()
                 else:
                     N_diff += self.data.compressed_length
-                #assign new sequence
+                # assign new sequence
                 node._cseq = seq
 
         return N_diff
@@ -1230,7 +1228,7 @@ class TreeAnc(object):
             self.tree.root.marginal_LH[i, :, :], pre = self.normalized_marginal(self.tree.root.upward_LH[i], indicators)
             marginal_LH_prefactor[i] = self.tree.root.marginal_subtree_LH_prefactor[i] + pre
             
-        self.tree.sequence_LH = np.sum(marginal_LH_prefactor * weight, axis=0)
+        self.tree.sequence_LH = np.log(np.sum((np.exp(marginal_LH_prefactor) * weight), axis=0))
         self.tree.total_sequence_LH = (self.tree.sequence_LH*self.data.multiplicity).sum()
             
         # Total likelihood over different rates:  L(a) = ∑_r P(E|a,r) * π_a * P(r)

@@ -986,7 +986,9 @@ class GTR(object):
         '''
         eLambdaT = np.diag(self._exp_lt(t)) # vector length = a
         Qs = self.v.dot(eLambdaT.dot(self.v_inv))   # This is P(nuc1 | given nuc_2)
-        return np.maximum(ttconf.SUPERTINY_NUMBER, Qs)   # avoid nan in log calculations
+        
+        # convert 0 or negative values in Qs to tiny positive, avoid nan in log calculations
+        return np.maximum(ttconf.SUPERTINY_NUMBER, Qs)
 
 
     def expQs(self, s):
