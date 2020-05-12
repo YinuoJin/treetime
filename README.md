@@ -1,200 +1,101 @@
-[![Build Status](https://travis-ci.org/neherlab/treetime.svg?branch=master)](https://travis-ci.org/neherlab/treetime)
-[![anaconda](https://anaconda.org/bioconda/treetime/badges/installer/conda.svg)](https://anaconda.org/bioconda/treetime)
-
-[![readthedocs](https://readthedocs.org/projects/treetime/badge/)](https://treetime.readthedocs.io/en/latest/)
-
-## TreeTime: maximum likelihood dating and ancestral sequence inference
+## Final Project
 
 ### Overview
 
-TreeTime provides routines for ancestral sequence reconstruction and inference of molecular-clock phylogenies, i.e., a tree where all branches are scaled such that the positions of terminal nodes correspond to their sampling times and internal nodes are placed at the most likely time of divergence.
+For our final project, we added features to a Python library for phylogenetic analysis called TreeTime. Our main improvements to TreeTime are the addition of rate variation and site-specific matrices for both joint and marginal ancestral sequence reconstruction. TreeTime supports a number of functions besides sequence reconstruction. For a fuller picture, here is how the main README.txt summarizes it:
 
-To optimize the likelihood of time-scaled phylogenies, TreeTime uses an iterative approach that first infers ancestral sequences given the branch length of the tree, then optimizes the positions of unconstrained nodes on the time axis, and then repeats this cycle.
-The only topology optimization are (optional) resolution of polytomies in a way that is most (approximately) consistent with the sampling time constraints on the tree.
-The package is designed to be used as a stand-alone tool on the command-line or as a library used in larger phylogenetic analysis work-flows.
-[The documentation of TreeTime is hosted on readthedocs.org](https://treetime.readthedocs.io/en/latest/).
+> TreeTime provides routines for ancestral sequence reconstruction and inference of molecular-clock phylogenies, i.e., a tree where all branches are scaled such that the positions of terminal nodes correspond to their sampling times and internal nodes are placed at the most likely time of divergence. 
+>
+> To optimize the likelihood of time-scaled phylogenies, TreeTime uses an iterative approach that first infers ancestral sequences given the branch length of the tree, then optimizes the positions of unconstrained nodes on the time axis, and then repeats this cycle. The only topology optimization are (optional) resolution of polytomies in a way that is most (approximately) consistent with the sampling time constraints on the tree. The package is designed to be used as a stand-alone tool on the command-line or as a library used in larger phylogenetic analysis work-flows
 
-In addition to scripting TreeTime or using it via the command-line, there is also a small web server at [treetime.ch](https://treetime.biozentrum.unibas.ch/).
+When ancestral sequence reconstruction is used as a sub-step in complex analytical procedures, such as the expectation-maximization system mentioned above, rate variation and site-specific options can still be applied. However, we focused on improving standalone ancestral sequence reconstruction. 
 
-![Molecular clock phylogeny of 200 NA sequences of influenza A H3N2](https://raw.githubusercontent.com/neherlab/treetime_examples/master/figures/tree_and_clock.png)
+### Installation and Prerequisites
 
-Have a look at our repository with [example data](https://github.com/neherlab/treetime_examples) and the [tutorials](https://treetime.readthedocs.io/en/latest/tutorials.html).
+How to install TreeTime, and the prerequisites for doing so, haven't changed. Here is the relevant section of the main README.txt:
 
-#### Features
-* ancestral sequence reconstruction (marginal and joint maximum likelihood)
-* molecular clock tree inference (marginal and joint maximum likelihood)
-* inference of GTR models
-* rerooting to maximize temporal signal and optimize the root-to-tip distance vs time relationship
-* simple phylodynamic analysis such as coalescent model fits
-* sequence evolution along trees using flexible site specific models.
+> TreeTime is compatible with Python 2.7 upwards and is tested on 2.7, 3.5, and 3.6. It depends on several Python libraries:
+> * numpy, scipy, pandas: for all kind of mathematical operations as matrix operations, numerical integration, interpolation, minimization, etc.
+> * BioPython: for parsing multiple sequence alignments and all phylogenetic functionality
+> * matplotlib: optional dependency for plotting
+>
+> You may install TreeTime and its dependencies by running
+>```bash
+>  pip install .
+>```
+> within this repository. You can also install TreeTime from PyPi via
+>```bash
+>  pip install phylo-treetime
+>```
+> You might need root privileges for system wide installation. Alternatively, you can simply use it TreeTime locally without installation. In this case, just download and unpack it, and then add the TreeTime folder to your $PYTHONPATH.
 
-## Table of contents
-  * [Installation and prerequisites](#installation-and-prerequisites)
-  * [Command-line usage](#command-line-usage)
-    + [Timetrees](#timetrees)
-    + [Rerooting and substitution rate estimation](#rerooting-and-substitution-rate-estimation)
-    + [Ancestral sequence reconstruction](#ancestral-sequence-reconstruction)
-    + [Homoplasy analysis](#homoplasy-analysis)
-    + [Mugration analysis](#mugration-analysis)
-    + [Metadata and date format](#metadata-and-date-format)
-  * [Example scripts](#example-scripts)
-  * [Related tools](#related-tools)
-  * [Projects using TreeTime](#projects-using-treetime)
-  * [Building the documentation](#building-the-documentation)
-  * [Developer info](#developer-info)
+### Ancestral Sequence Reconstruction (Vanilla)
 
+There are two steps to (standalone) ancestral sequence reconstruction in TreeTime. First, instantiate a TreeTime tree. Second, run ancestral sequence reconstruction on it. The 3 standard parameters for a tree are a topology, a multiple-sequence alignment (a MSA), and a general time-reversible model (a GTR). Topologies and MSAs are read in from files. Acceptable file formats for topologies are newick, nexus and phylip,  and for MSAs fasta and phylip. GTRs are specified with the name of a substitution model, e.g. "Jukes-Cantor" or "WAG"; the full set of options is found in the ```standard``` function in ```gtr.py```. This last choice is important because when a tree has ancestral sequence reconstruction or other phylogenetic techniques run on it, the substitution model that they use in their calculations is determined by the GTR attatched to the tree.
 
+```python
+from treetime import TreeAnc
 
-### Installation and prerequisites
+# instatiate tree
+myTree = TreeAnc(gtr="Jukes-Cantor", tree="data/mytree.nwk", aln="data/mytree.fasta")
 
-TreeTime is compatible with Python 2.7 upwards and is tested on 2.7, 3.5, and 3.6.  It depends on several Python libraries:
+# actually do reconstruction (marginal)
+myTree.infer_ancestral_sequences(marginal=True)
 
-* numpy, scipy, pandas: for all kind of mathematical operations as matrix
-  operations, numerical integration, interpolation, minimization, etc.
-
-* BioPython: for parsing multiple sequence alignments and all phylogenetic
-  functionality
-
-* matplotlib: optional dependency for plotting
-
-You may install TreeTime and its dependencies by running
-
-```bash
-  pip install .
-```
-within this repository.
-You can also install TreeTime from PyPi via
-```bash
-  pip install phylo-treetime
+# actually do reconstruction (joint)
+myTree.infer_ancestral_sequences(marginal=False)
 ```
 
-You might need root privileges for system wide installation. Alternatively, you can simply use it TreeTime locally without installation. In this case, just download and unpack it, and then add the TreeTime folder to your $PYTHONPATH.
+### Rate Variation
+Rate distributions are always discrete in TreeTime. Trees store the rate distribution that applies to them as a list of ```(rate, log_probability_of_rate)``` tuples. Trees have an optional ```rates``` parameter to set the rate distribution that is used for them. ```rates``` expects an input in the standard form: a list of ```(rate, log_probability_of_rate)``` tuples. If not passed a rate-setting parameter, trees will default to the uniform distribution,```[(1, 0)]```. 
 
+The ```ASRV``` class derives gamma distributions and presents them in a useful format for modelling rate variation. ```ASRV.calc_rates()``` returns an 8-rate approximation of the continuous gamma distribution parametrized by a given alpha value. The list returned by ```calc_rates()``` is correctly formatted for use in the ```rates``` parameter.
 
-### Command-line usage
-TreeTime can be used as part of python programs that create and interact with tree time objects. How TreeTime can be used to address typical questions like ancestral sequence reconstruction, rerooting, timetree inference etc is illustrated by a collection of example scripts described below.
+```python
+import numpy as np
+from treetime import TreeAnc
+from treetime.asrv import ASRV
 
-In addition, TreeTime can be used from the command line with arguments specifying input data and parameters.
-Trees can be read as newick, nexus and phylip files; fasta and phylip are supported alignment formats; metadata and dates can be provided as csv or tsv files, see [below](#metadata-and-date-format) for details.
+# manual rates
+myTree = TreeAnc(rates=[(.5, np.log(1/3)), (1, np.log(1/3)), (1.5, np.log(1/3))], gtr="Jukes-Cantor", tree="data/mytree.nwk", aln="data/mytree.fasta")
 
-#### Timetrees
-The to infer a timetree, i.e. a phylogenetic tree in which branch length reflect time rather than divergence, TreeTime offers implements the command:
-```bash
-  treetime --aln <input.fasta> --tree <input.nwk> --dates <dates.csv>
-```
-This command will infer a time tree, ancestral sequences, a GTR model, and optionally confidence intervals and coalescent models.
-A detailed explanation is of this command with its various options and examples is available in [the documentation on readthedocs.org](https://treetime.readthedocs.io/en/latest/tutorials/timetree.html).
-
-
-#### Rerooting and substitution rate estimation
-To explore the temporal signal in the data and estimate the substitution rate (instead if full-blown timetree estimation), TreeTime implements a subcommand `clock` that is called as follows
-```bash
-  treetime clock --tree <input.nwk> --aln <input.fasta> --dates <dates.csv> --reroot least-squares
-```
-The full list if options is available by typing `treetime clock -h`.
-Instead of an input alignment, `--sequence-length <L>` can be provided.
-Documentation of additional options and examples are available at in [the documentation on readthedocs.org](https://treetime.readthedocs.io/en/latest/tutorials/clock.html).
-
-
-#### Ancestral sequence reconstruction:
-The subcommand
-```bash
-  treetime ancestral --aln input.fasta --tree input.nwk
-```
-will reconstruct ancestral sequences at internal nodes of the input tree.
-The full list if options is available by typing `treetime ancestral -h`.
-A detailed explanation of `treetime ancestral` with examples is available at in [the documentation on readthedocs.org](https://treetime.readthedocs.io/en/latest/tutorials/ancestral.html).
-
-#### Homoplasy analysis
-Detecting and quantifying homoplasies or recurrent mutations is useful to check for recombination, putative adaptive sites, or contamination.
-TreeTime provides a simple command to summarize homoplasies in data
-```bash
-  treetime homoplasy --aln <input.fasta> --tree <input.nwk>
-```
-The full list if options is available by typing `treetime homoplasy -h`.
-Please see [the documentation on readthedocs.org](https://treetime.readthedocs.io/en/latest/tutorials/homoplasy.html) for examples and more documentation.
-
-#### Mugration analysis
-Migration between discrete geographic regions, host switching, or other transition between discrete states are often parameterized by time-reversible models analogous to models describing evolution of genome sequences.
-Such models are hence often called "mugration" models.
-TreeTime GTR model machinery can be used to infer mugration models:
-```bash
-  treetime mugration --tree <input.nwk> --states <states.csv> --attribute <field>
-```
-where `<field>` is the relevant column in the csv file specifying the metadata `states.csv`, e.g. `<field>=country`.
-The full list if options is available by typing `treetime mugration -h`.
-Please see [the documentation on readthedocs.org](https://treetime.readthedocs.io/en/latest/tutorials/mugration.html) for examples and more documentation.
-
-#### Metadata and date format
-Several of TreeTime commands require the user to specify a file with dates and/or other meta data.
-TreeTime assumes these files to by either comma (csv) or tab-separated (tsv) files.
-The first line of these files is interpreted as header line specifying the content of the columns.
-Each file needs to have at least one column that is named `name`, `accession`, or `strain`.
-This column needs to contain the names of each sequence and match the names of taxons in the tree if one is provided.
-If more than one of `name`, `accession`, or `strain` is found, TreeTime will use the first.
-
-If the analysis requires dates, at least one column name needs to contain `date` (i.e. `sampling date` is fine).
-Again, if multiple hits are found, TreeTime will use the first.
-TreeTime will attempt to parse dates in the following way and order
-
-| order | type/format | example | description|
-| --- |-------------|---------|------------|
-| 1| float       | 2017.56 | decimal date |
-| 2| [float:float] | [2013.45:2015.56] | decimal date range |
-| 3| %Y-%m-%d    | 2017-08-25 | calendar date in ISO format |
-| 4| %Y-XX-XX    | 2017-XX-XX | calendar date missing month and/or day |
-
-
-### Example scripts
-The following scripts illustrate how treetime can be used to solve common problem with short python scripts. They are meant to be used in an interactive ipython environment and run as `run examples/ancestral_inference.py`.
- * [`ancestral_inference.py`](https://github.com/neherlab/treetime_examples/tree/master/scripts/ancestral_sequence_inference.py) illustrates how ancestral sequences are inferred and likely mutations are assigned to branches in the tree,
- * [`relaxed_clock.py`](https://github.com/neherlab/treetime_examples/tree/master/scripts/relaxed_clock.py) walks the user through the usage of relaxed molecular clock models.
- * [`examples/rerooting_and_timetrees.py`](https://github.com/neherlab/treetime_examples/tree/master/scripts/rerooting_and_timetrees.py) illustrates the rerooting and root-to-tip regression scatter plots.
- * [`ebola.py`](https://github.com/neherlab/treetime_examples/tree/master/scripts/ebola.py) uses about 300 sequences from the 2014-2015 Ebola virus outbreak to infer a timetree. This example takes a few minutes to run.
-
-HTML documentation of the different classes and function is available at [here](https://treetime.biozentrum.unibas.ch/doc).
-
-### Related tools
-
-There are several other tools which estimate molecular clock phylogenies.
-* [Beast](http://beast.bio.ed.ac.uk/) relies on the MCMC-type sampling of trees. It is hence rather slow for large data sets. But BEAST allows the flexible inclusion of prior distributions, complex evolutionary models, and estimation of parameters.
-* [Least-Square-Dating](http://www.atgc-montpellier.fr/LSD/) (LSD) emphasizes speed (it scales as O(N) as **TreeTime**), but provides limited scope for customization.
-* [treedater](https://github.com/emvolz/treedater) by Eric Volz and Simon Frost is an R package that implements time tree estimation and supports relaxed clocks.
-
-### Projects using TreeTime
-
-  * TreeTime is an integral part of the [nextstrain.org](http://nextstrain.org) project to track and analyze viral sequence data in real time.
-  * [panX](http://pangenome.de) uses TreeTime for ancestral reconstructions and inference of gene gain-loss patterns.
-
-
-### Building the documentation
-
-The API documentation for the TreeTime package is generated created with Sphinx. The source code for the documentaiton is located in doc folder.
-
-  - sphinx-build to generate static html pages from source. Installed as
-
-  ```bash
-  pip install Sphinx
-  ```
-
-After required packages are installed, navigate to doc directory, and build the docs by typing:
-
-```bash
-make html
+# gamma-distributed rates from ASRV class
+asrv = ASRV(alpha=.5)
+rates = asrv.calc_rates()
+myTree = TreeAnc(rates=rates, gtr="Jukes-Cantor", tree="data/mytree.nwk", aln="data/mytree.fasta")
 ```
 
-Instead of html, another target as `latex` or `epub` can be specified to build the docs in the desired format.
+If marginal or joint reconstruction is run on a tree that has a non-uniform rate distribution, we automatically switch to performing the reconstruction with an algorithm that takes multiple rates into account. The branch and bound algorithm is used under the hood for joint reconstruction with rate variation. 
 
+### Site-Specific Transition Probabilities
+A tree will have site-specific matrices if its GTR parameter is set one of ```"BE", "SECONDARY", "EX", "EHO"```. We think it fits to use the GTR parameter like this because site-specific matrices are just a very sophisticated substitution model in some sense. As would be expected from the way the GTR parameter is used in a regular tree, ancestral sequence reconstruction on a tree with site-specific matrices uses those matrixes to provide the substitution model (at their corresponding sites) that is used in the reconstruction calculations. ```"BE"``` and ```"EX"``` invoke the same matrices; ```"SECONDARY"``` and ```"EHO"``` are similarly paired. (Why there are "repeats" is explained below.) The two matrices of ```"BE"/"EX"``` encode solvent accessibility: whether a site is buried or exposed. The three matrices of ```"SECONDARY"/"EHO"``` encode protein secondary structure: whether a site is on the helix, extended away, or something else ("O" for "other"). Using these models naturally requires specifying the category to which each site in the input sequence belongs; this is done with an additional tree instantiation parameter, ```struct_propty```. ```struct_propty``` is an array (Python list) of the same length as the input sequence (i.e. as the MSA). The nth value in the array is a one-letter string corresponding to the catagory of nth site in the sequence: ```"B"``` for buried, ```"E"``` for exposed, ```"H"``` for helix, ```"E"``` again for extend, and ```"O"``` for other. The reason why there are "repeat" matrix classes is a trade-off. ```"BE"``` and ```"SECONDARY"``` are quite slow but the GTR property of a tree set to one of them retains its expected behavior. ```"EX"``` and ```"EHO"``` make opposite choice, breaking some parts of the inferface in exchange for speed. Site-specific matrices can be used in conjunction with rate variation. 
 
-#### Requirements
+```python
+from treetime import TreeAnc
 
-To build the documentation, sphinx-build tool should be installed. The doc pages are using basicstrap html theme to have the same design as the TreeTime web server. Therefore, the basicstrap theme should be also available in the system.
+# pretend input sequence is length 5
+solvent_accessibility = ["B", "B", "E", "E," "B"] 
 
+# create tree using buried-exposed matrices
+myTree = TreeAnc(gtr="BE", struct_propty=solvent_accessibility, tree="data/mytree.nwk", aln="data/mytree.fasta")
+```
 
-### Developer info
+  
+### Changed Files
+This is an exhaustive list of the files in TreeTime that we modified for our project.
+* treetime/treeanc.py
+* treetime/gtr_site_specific.py
+* treetime/seq_utils.py
+* treetime/asrv.py (created)
+* treetime/run_test.py
+* treetime/test_anc.py (created)
+* test_treetime.py
 
-  - Copyright and License: Pavel Sagulenko, Emma Hodcroft, and Richard Neher, MIT Licence
-  - References
-    * [TreeTime: Maximum-likelihood phylodynamic analysis](https://academic.oup.com/ve/article/4/1/vex042/4794731) by Pavel Sagulenko, Vadim Puller and Richard A Neher. Virus Evolution.
-    * [NextStrain: real-time tracking of pathogen evolution](https://academic.oup.com/bioinformatics/advance-article/doi/10.1093/bioinformatics/bty407/5001388) by James Hadfield et al. Bioinformatics.
+### Extended Example
+See the "TreeTime Demo" Jupyter notebook. For some reason, Jupyter notebooks don't seem to work unless TreeTime is fully installed; it isn't sufficient to just put the TreeTime folder on your PYTHONPATH.
 
+The tests are good demos as well. In paticular, ```test_ancestral``` shows biological data being loaded from appropriately formatted files and then used in both joint and marginal reconstruction. 
+ 
+### Related Tools
+[PASTA](https://github.com/smirarab/pasta) for generating MSAs, [RAxML](https://github.com/stamatak/standard-RAxML) for generating tree toplogies and inferring alpha parameters, [DSSP](https://github.com/cmbi/hssp)/[Sable](http://sable.cchmc.org) for inferring protein structual information.
+ 
