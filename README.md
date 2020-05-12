@@ -84,13 +84,14 @@ myTree = TreeAnc(gtr="BE", struct_propty=solvent_accessibility, tree="data/mytre
   
 ### Changed Files
 This is an exhaustive list of the files in TreeTime that we modified for our project.
+* treetime/aa_models.py
 * treetime/treeanc.py
 * treetime/gtr_site_specific.py
 * treetime/seq_utils.py
 * treetime/asrv.py (created)
-* treetime/run_test.py
-* treetime/test_anc.py (created)
-* test_treetime.py
+* test/run_test.py
+* test/test_anc.py (created)
+* test/test_treetime.py
 
 ### Extended Example
 See the "TreeTime Demo" Jupyter notebook. For some reason, Jupyter notebooks don't seem to work unless TreeTime is fully installed; it isn't sufficient to just put the TreeTime folder on your PYTHONPATH.
