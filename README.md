@@ -103,6 +103,9 @@ For examples with real data, please refer to [DEMO notebook for marginal ASR](./
 ### Data Availability
 All the tested real data are under 'data' directory except for the FP protein phylogeny. The authors (Randall \textit{et al.}, 2016) indicated that "data available upon request via email", so we couldn't upload the sequences & phylogeny publicly online. Please refer to their original [paper](https://www.nature.com/articles/ncomms12847). Part of the data are available in the [supplementary information](https://static-content.springer.com/esm/art%3A10.1038%2Fncomms12847/MediaObjects/41467_2016_BFncomms12847_MOESM2044_ESM.pdf).
 
+### Algorithm summary
+For the summary of implemented algorithms of joint ASRV and marginal ASRV, pleease refer to the original papers or the [summary file](./docs/algorithms_summary.pdf)
+
 ### Related Tools
 [PASTA](https://github.com/smirarab/pasta) for generating MSAs, [RAxML](https://github.com/stamatak/standard-RAxML) for generating tree toplogies and inferring alpha parameters, [DSSP](https://github.com/cmbi/hssp)/[Sable](http://sable.cchmc.org) for inferring protein structual information.
  
