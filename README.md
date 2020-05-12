@@ -101,7 +101,7 @@ The tests are good demos as well. In paticular, ```test_ancestral``` shows biolo
 For examples with real data, please refer to [DEMO notebook for marginal ASR](./test/evaluation_and_plots.ipynb), for all generated plots, please refer to 'test' directory. 
 
 ### Data Availability
-All the tested real data are under 'data' directory except for the FP protein phylogeny. The authors (Randall \textit{et al.}, 2016) indicated that "data available upon request via email", so we couldn't upload the sequences & phylogeny publicly online. Please refer to their original [paper](https://www.nature.com/articles/ncomms12847). Part of the data are available in the [supplementary information](https://static-content.springer.com/esm/art%3A10.1038%2Fncomms12847/MediaObjects/41467_2016_BFncomms12847_MOESM2044_ESM.pdf).
+All the tested real data are under 'data' directory except for the FP protein phylogeny. The authors (Randall *et al.*, 2016) indicated that "data available upon request via email", so we couldn't upload the sequences & phylogeny publicly online. Please refer to their original [paper](https://www.nature.com/articles/ncomms12847). Part of the data are available in the [supplementary information](https://static-content.springer.com/esm/art%3A10.1038%2Fncomms12847/MediaObjects/41467_2016_BFncomms12847_MOESM2044_ESM.pdf).
 
 ### Algorithm summary
 For the summary of implemented algorithms of joint ASRV and marginal ASRV, pleease refer to the original papers or the [summary file](./docs/algorithms_summary.pdf)
