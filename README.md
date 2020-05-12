@@ -1,4 +1,5 @@
-## Final Project
+## Computational Genomics Final Project 
+### (Extending Ancestral Sequence Reconstruction features to Treetime)
 
 ### Overview
 
@@ -83,19 +84,25 @@ myTree = TreeAnc(gtr="BE", struct_propty=solvent_accessibility, tree="data/mytre
   
 ### Changed Files
 This is an exhaustive list of the files in TreeTime that we modified for our project.
+* treetime/aa_models.py
 * treetime/treeanc.py
 * treetime/gtr_site_specific.py
 * treetime/seq_utils.py
 * treetime/asrv.py (created)
-* treetime/run_test.py
-* treetime/test_anc.py (created)
-* test_treetime.py
+* test/run_test.py
+* test/test_anc.py (created)
+* test/test_treetime.py
 
 ### Extended Example
 See the "TreeTime Demo" Jupyter notebook. For some reason, Jupyter notebooks don't seem to work unless TreeTime is fully installed; it isn't sufficient to just put the TreeTime folder on your PYTHONPATH.
 
 The tests are good demos as well. In paticular, ```test_ancestral``` shows biological data being loaded from appropriately formatted files and then used in both joint and marginal reconstruction. 
- 
+
+For examples with real data, please refer to [DEMO notebook for marginal ASR](./test/evaluation_and_plots.ipynb), for all generated plots, please refer to 'test' directory. 
+
+### Data Availability
+All the tested real data are under 'data' directory except for the FP protein phylogeny. The authors (Randall \textit{et al.}, 2016) indicated that "data available upon request via email", so we couldn't upload the sequences & phylogeny publicly online. Please refer to their original [paper](https://www.nature.com/articles/ncomms12847). Part of the data are available in the [supplementary information](https://static-content.springer.com/esm/art%3A10.1038%2Fncomms12847/MediaObjects/41467_2016_BFncomms12847_MOESM2044_ESM.pdf).
+
 ### Related Tools
 [PASTA](https://github.com/smirarab/pasta) for generating MSAs, [RAxML](https://github.com/stamatak/standard-RAxML) for generating tree toplogies and inferring alpha parameters, [DSSP](https://github.com/cmbi/hssp)/[Sable](http://sable.cchmc.org) for inferring protein structual information.
  
